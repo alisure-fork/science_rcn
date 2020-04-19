@@ -1,15 +1,12 @@
 """
 Learn a two-layer RCN model. See train_image for the main entry.
 """
-from collections import namedtuple
-import logging
 import numpy as np
 import networkx as nx
+from collections import namedtuple
+from science_rcn.preproc import Preproc
 from scipy.spatial import distance, cKDTree
 
-from science_rcn.preproc import Preproc
-
-LOG = logging.getLogger(__name__)
 
 ModelFactors = namedtuple('ModelFactors', 'frcs edge_factors graph')
 
@@ -72,8 +69,7 @@ def sparsify(bu_msg, suppress_radius=3):
         if not img[r, c]:
             break
         frcs.append((bu_msg[:, r, c].argmax(), r, c))
-        img[r - suppress_radius:r + suppress_radius + 1, 
-            c - suppress_radius:c + suppress_radius + 1] = False
+        img[r - suppress_radius:r + suppress_radius + 1, c - suppress_radius:c + suppress_radius + 1] = False
     return np.array(frcs)
 
 
@@ -91,9 +87,8 @@ def learn_laterals(frcs, bu_msg, perturb_factor, use_adjaceny_graph=False):
     graph = add_underconstraint_edges(frcs, graph, perturb_factor=perturb_factor)
     graph = adjust_edge_perturb_radii(frcs, graph, perturb_factor=perturb_factor)
 
-    edge_factors = np.array(
-        [(edge_source, edge_target, edge_attrs['perturb_radius'])
-         for edge_source, edge_target, edge_attrs in graph.edges_iter(data=True)])
+    edge_factors = np.array([(edge_source, edge_target, edge_attrs['perturb_radius'])
+                             for edge_source, edge_target, edge_attrs in graph.edges(data=True)])
     return graph, edge_factors
 
 
@@ -114,11 +109,7 @@ def make_adjacency_graph(frcs, bu_msg, max_dist=3):
     return graph
 
 
-def add_underconstraint_edges(frcs,
-                              graph,
-                              perturb_factor=2.,
-                              max_cxn_length=100,
-                              tolerance=4):
+def add_underconstraint_edges(frcs, graph, perturb_factor=2., max_cxn_length=100, tolerance=4):
     """Examines all pairs of variables and greedily adds pairwise constraints
     until the pool flexibility matches the desired amount of flexibility specified by 
     perturb_factor and tolerance.
@@ -159,15 +150,11 @@ def add_underconstraint_edges(frcs,
         target_perturb_dist = dist / float(perturb_factor)
         actual_perturb_dist = max(0, np.ceil(target_perturb_dist))
         if perturb_dist >= target_perturb_dist * tolerance:
-            graph.add_edge(source,
-                           target,
-                           perturb_radius=int(actual_perturb_dist))
+            graph.add_edge(source, target, perturb_radius=int(actual_perturb_dist))
     return graph
 
 
-def adjust_edge_perturb_radii(frcs,
-                              graph,
-                              perturb_factor=2):
+def adjust_edge_perturb_radii(frcs, graph, perturb_factor=2):
     """Returns a new graph where the 'perturb_radius' has been adjusted to account for 
     rounding errors. See train_image for parameters and returns.
     """
@@ -182,9 +169,9 @@ def adjust_edge_perturb_radii(frcs,
         round_up_error = total_rounding_error + upper - desired_radius
         round_down_error = total_rounding_error + lower - desired_radius
         if abs(round_up_error) < abs(round_down_error):
-            graph.edge[n1][n2]['perturb_radius'] = upper
+            graph[n1][n2]['perturb_radius'] = upper
             total_rounding_error = round_up_error
         else:
-            graph.edge[n1][n2]['perturb_radius'] = lower
+            graph[n1][n2]['perturb_radius'] = lower
             total_rounding_error = round_down_error
     return graph

@@ -1,12 +1,9 @@
 """A pre-processing layer of the RCN model. See Sec S8.1 for details.
 """
-import logging
 import numpy as np
+from scipy.signal import fftconvolve
 from scipy.ndimage import maximum_filter
 from scipy.ndimage.filters import gaussian_filter
-from scipy.signal import fftconvolve
-
-LOG = logging.getLogger(__name__)
 
 
 class Preproc(object):
@@ -32,15 +29,12 @@ class Preproc(object):
         Masks for oriented non-max suppression.
     """
 
-    def __init__(self,
-                 num_orients=16,
-                 filter_scale=4.,
-                 cross_channel_pooling=False):
+    def __init__(self, num_orients=16, filter_scale=4., cross_channel_pooling=False):
         self.num_orients = num_orients
         self.filter_scale = filter_scale
         self.cross_channel_pooling = cross_channel_pooling
-        self.suppression_masks = generate_suppression_masks(filter_scale=filter_scale, 
-                                                            num_orients=num_orients)
+        self.suppression_masks = generate_suppression_masks(filter_scale=filter_scale, num_orients=num_orients)
+        pass
 
     def fwd_infer(self, img, brightness_diff_threshold=40.):
         """Compute bottom-up (forward) inference.
@@ -85,13 +79,13 @@ class Preproc(object):
 
     @property
     def filters(self):
-        return get_gabor_filters(
-            filter_scale=self.filter_scale, num_orients=self.num_orients, weights=False)
+        return get_gabor_filters(filter_scale=self.filter_scale, num_orients=self.num_orients, weights=False)
 
     @property
     def pos_filters(self):
-        return get_gabor_filters(
-            filter_scale=self.filter_scale, num_orients=self.num_orients, weights=True)
+        return get_gabor_filters(filter_scale=self.filter_scale, num_orients=self.num_orients, weights=True)
+
+    pass
 
 
 def get_gabor_filters(size=21, filter_scale=4., num_orients=16, weights=False):
@@ -131,7 +125,7 @@ def generate_suppression_masks(filter_scale=4., num_orients=16):
     # Compute for orientations [0, pi), then flip for [pi, 2*pi)
     for i, angle in enumerate(np.linspace(0., np.pi, num_orients // 2, endpoint=False)):
         x, y = np.cos(angle), np.sin(angle)
-        for r in xrange(1, int(np.sqrt(2) * size / 2)):
+        for r in range(1, int(np.sqrt(2) * size / 2)):
             dx, dy = round(r * x), round(r * y)
             if abs(dx) > cx or abs(dy) > cy:
                 continue

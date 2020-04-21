@@ -9,8 +9,8 @@ import networkx as nx
 from alisuretool.Tools import Tools
 from numpy.random import rand, randint
 from science_rcn.preproc import Preproc
-from scipy.ndimage.morphology import grey_dilation
 # from science_rcn.dilation.dilation import dilate_2d
+from scipy.ndimage.morphology import grey_dilation as dilate_2d
 
 
 class RCNInferenceError(Exception):
@@ -112,8 +112,7 @@ def forward_pass(frcs, bu_msg, graph, pool_shape):
         if source in incoming_msgs:
             msg_in = msg_in + incoming_msgs[source]
             del incoming_msgs[source]
-        # msg_in = dilate_2d(msg_in, (2 * perturb_radius + 1, 2 * perturb_radius + 1))
-        msg_in = grey_dilation(msg_in, size=(2 * perturb_radius + 1, 2 * perturb_radius + 1))
+        msg_in = dilate_2d(msg_in, (2 * perturb_radius + 1, 2 * perturb_radius + 1))
         if target in incoming_msgs:
             incoming_msgs[target] += msg_in
         else:
@@ -251,8 +250,7 @@ class LoopyBPInference(object):
             Shape is (vps, hps).
         """
         pert_diameter = 2 * pert_radius + 1
-        # out_mess = dilate_2d(in_mess, (pert_diameter, pert_diameter))
-        out_mess = grey_dilation(in_mess, size=(pert_diameter, pert_diameter))
+        out_mess = dilate_2d(in_mess, (pert_diameter, pert_diameter))
         return out_mess - out_mess.max()
 
     def new_messages(self):

@@ -26,131 +26,58 @@ from science_rcn.inference import test_image
 from science_rcn.learning import train_image
 
 
-def run_experiment(data_dir='..\\data\\MNIST', train_size=20, test_size=20, full_test_set=False,
-                   pool_shape=(25, 25), perturb_factor=2., parallel=True, verbose=False, seed=5):
-    """Run MNIST experiments and evaluate results. 
+def get_mnist_data(data_dir, train_size, test_size, full_test_set=False, seed=5):
 
-    Parameters
-    ----------
-    data_dir : string
-        Dataset directory.
-    train_size, test_size : int
-        MNIST dataset sizes are in increments of 10
-    full_test_set : bool
-        Test on the full MNIST 10k test set.
-    pool_shape : (int, int)
-        Vertical and horizontal pool shapes.
-    perturb_factor : float
-        How much two points are allowed to vary on average given the distance
-        between them. See Sec S2.3.2 for details.
-    parallel : bool
-        Parallelize over multiple CPUs.
-    verbose : bool
-        Higher verbosity level.
-    seed : int
-        Random seed used by numpy.random for sampling training set.
-    
-    Returns
-    -------
-    model_factors : ([numpy.ndarray], [numpy.ndarray], [networkx.Graph])
-        ([frcs], [edge_factors], [graphs]), outputs of train_image in learning.py.
-    test_results : [(int, float)]
-        List of (winner_idx, winner_score), outputs of test_image in inference.py.
-    """
-
-    num_workers = None if parallel else 1
-    pool = Pool(num_workers)
-
-    train_data, test_data = get_mnist_data_iters(data_dir, train_size, test_size, full_test_set, seed=seed)
-
-    Tools.print("Training on {} images...".format(len(train_data)))
-    train_partial = partial(train_image, perturb_factor=perturb_factor)
-    train_results = pool.map_async(train_partial, [d[0] for d in train_data]).get(99999)
-    all_model_factors = zip(*train_results)
-
-    Tools.print("Testing on {} images...".format(len(test_data)))
-    test_partial = partial(test_image, model_factors=[i for i in all_model_factors], pool_shape=pool_shape)
-    test_results = pool.map_async(test_partial, [d[0] for d in test_data]).get(99999)
-
-    # Evaluate result
-    correct = 0
-    for test_idx, (winner_idx, _) in enumerate(test_results):
-        correct += int(test_data[test_idx][1]) == winner_idx // (train_size // 10)
-    Tools.print("Total test accuracy = {}".format(float(correct) / len(test_results)))
-    pass
-
-
-def get_mnist_data_iters(data_dir, train_size, test_size, full_test_set=False, seed=5):
-    """
-    Load MNIST data.
-
-    Assumed data directory structure:
-        training/
-            0/
-            1/
-            2/
-            ...
-        testing/
-            0/
-            ...
-
-    Parameters
-    ----------
-    train_size, test_size : int
-        MNIST dataset sizes are in increments of 10
-    full_test_set : bool
-        Test on the full MNIST 10k test set.
-    seed : int
-        Random seed used by numpy.random for sampling training set.
-
-    Returns
-    -------
-    train_data, train_data : [(numpy.ndarray, str)]
-        Each item reps a data sample (2-tuple of image and label)
-        Images are numpy.uint8 type [0,255]
-    """
-    if not os.path.isdir(data_dir):
-        raise IOError("Can't find your data dir '{}'".format(data_dir))
-
-    def _load_data(image_dir, num_per_class, get_filenames=False):
+    def _load_data(image_dir, num_per_class):
         loaded_data = []
         for category in sorted(os.listdir(image_dir)):
             cat_path = os.path.join(image_dir, category)
             if not os.path.isdir(cat_path) or category.startswith('.'):
                 continue
-            if num_per_class is None:
-                samples = sorted(os.listdir(cat_path))
-            else:
-                samples = np.random.choice(sorted(os.listdir(cat_path)), num_per_class)
+            samples = sorted(os.listdir(cat_path))
+            if num_per_class is not None:
+                samples = np.random.choice(samples, num_per_class)
 
-            for fname in samples:
-                filepath = os.path.join(cat_path, fname)
-                # Resize and pad the images to (200, 200)
-                image_arr = np.array(Image.open(filepath).resize((112, 112)))
-                img = np.pad(image_arr, pad_width=tuple([(p, p) for p in (44, 44)]),
-                             mode='constant', constant_values=0)
-                loaded_data.append((img, category))
+            for sample in samples:
+                image_arr = np.array(Image.open(os.path.join(cat_path, sample)).resize((112, 112)))
+                image_arr = np.pad(image_arr, tuple([(p, p) for p in (44, 44)]), mode='constant', constant_values=0)
+                loaded_data.append((image_arr, category))
                 pass
             pass
         return loaded_data
 
     np.random.seed(seed)
-    train_set = _load_data(os.path.join(data_dir, 'training'), num_per_class=train_size // 10)
+    train_set = _load_data(os.path.join(data_dir, 'training'), num_per_class=train_size//10)
     test_set = _load_data(os.path.join(data_dir, 'testing'), num_per_class=None if full_test_set else test_size//10)
     return train_set, test_set
 
 
+def run_experiment(data_dir='..\\data\\MNIST', train_size=20, test_size=20,
+                   full_test_set=False, pool_shape=(25, 25), perturb_factor=2., parallel=True, seed=5):
+    # Data
+    train_data, test_data = get_mnist_data(data_dir, train_size, test_size, full_test_set, seed=seed)
+    pool = Pool(None if parallel else 1)
+
+    # Training
+    Tools.print("Training on {} images...".format(len(train_data)))
+    train_partial = partial(train_image, perturb_factor=perturb_factor)
+    train_results = pool.map_async(train_partial, [d[0] for d in train_data]).get(99999)
+    all_model_factors = zip(*train_results)
+
+    # Testing
+    Tools.print("Testing on {} images...".format(len(test_data)))
+    test_partial = partial(test_image, model_factors=list(all_model_factors), pool_shape=pool_shape)
+    test_results = pool.map_async(test_partial, [d[0] for d in test_data]).get(99999)
+
+    # Evaluate result
+    correct = [int(test_data[idx][1])==winner//(train_size//10) for idx, (winner, _) in enumerate(test_results)]
+    Tools.print("Total test accuracy = {}".format(float(sum(correct)) / len(test_results)))
+    pass
+
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--train_size', dest='train_size', type=int, default=20)
-    parser.add_argument('--test_size', dest='test_size', type=int, default=20)
-    parser.add_argument('--full_test_set', dest='full_test_set', action='store_true', default=False)
-    parser.add_argument( '--pool_shapes', dest='pool_shape', type=int, default=25, help="Pool shape.")
-    parser.add_argument('--perturb_factor', dest='perturb_factor', type=float, default=2.)
-    parser.add_argument('--seed', dest='seed', type=int, default=5)
-    parser.add_argument('--parallel', dest='parallel', default=True, action='store_true')
-    parser.add_argument('--verbose', dest='verbose', action='store_true', default=False)
-    options = parser.parse_args()
-    run_experiment(train_size=options.train_size, test_size=options.test_size, full_test_set=options.full_test_set,
-                   pool_shape=(options.pool_shape, options.pool_shape), perturb_factor=options.perturb_factor,
-                   seed=options.seed, verbose=options.verbose, parallel=options.parallel)
+    _train_size, _test_size = 20, 20
+    _full_test_set, _parallel = False, True
+    _pool_shape, _perturb_factor = 25, 2.
+    run_experiment(train_size=_train_size, test_size=_test_size, full_test_set=_full_test_set,
+                   parallel=_parallel, pool_shape=(_pool_shape, _pool_shape), perturb_factor=_perturb_factor)
